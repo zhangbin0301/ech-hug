@@ -6,7 +6,7 @@ WORKDIR /app
 
 # 安裝必要的套件：bash 和 curl
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends bash curl && \
+    apt-get install -y curl && \
     rm -rf /var/lib/apt/lists/*
 
 # 設定環境變數的預設值，這些變數對應腳本的配置
