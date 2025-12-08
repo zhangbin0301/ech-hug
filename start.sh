@@ -3,16 +3,17 @@ set -e
 
 # 獲取一個隨機端口
 get_free_port() {
+    # 選擇高端口號以避免衝突
     echo $(( ( RANDOM % 20000 ) + 10000 ))
 }
 
 # 執行核心服務啟動邏輯
 quicktunnel() {
-    # --- START: 插入的 DNS 設定程式碼 ---
+    # --- START: 強制 DNS 設定 ---
     echo "--- 正在強制設定 DNS 為 1.1.1.1/1.0.0.1 ---"
     echo "nameserver 1.1.1.1" > /etc/resolv.conf
     echo "nameserver 1.0.0.1" >> /etc/resolv.conf
-    # --- END: 插入的 DNS 設定程式碼 ---
+    # --- END: 強制 DNS 設定 ---
 
     echo "--- 正在下載服務二進制文件 ---"
 
@@ -56,6 +57,20 @@ quicktunnel() {
 
     echo "--- 啟動服務 ---"
 
+    # 0. 端口分配：
+    #   Caddy 端口 = WSPORT
+    #   ECH 端口   = WSPORT + 1
+    if [ -z "$WSPORT" ]; then
+        WSPORT=$(get_free_port)
+        echo "WSPORT 未設置，自動選取給 Caddy 的端口: $WSPORT"
+    else
+        echo "使用自定義 WSPORT 給 Caddy: $WSPORT"
+    fi
+
+    ECHPORT=$((WSPORT + 1))
+    export WSPORT ECHPORT
+    echo "ECH Server 將使用端口: $ECHPORT"
+
     # 1. 啟動 Opera Proxy (如果 $OPERA=1)
     if [ "$OPERA" = "1" ]; then
         operaport=$(get_free_port)
@@ -68,19 +83,10 @@ quicktunnel() {
         OPERA_PID=$!
     fi
 
-    # 2. 啟動 ECH Server (處理 WSPORT)
+    # 2. 啟動 ECH Server（监听 ECHPORT）
     sleep 1
 
-    if [ -z "$WSPORT" ]; then
-        wsport=$(get_free_port)
-        echo "WSPORT 環境變數未設置，自動選取端口: $wsport"
-    else
-        wsport="$WSPORT"
-        echo "使用自定義的 WSPORT 端口: $wsport"
-    fi
-
-    # 用数组拼 ECH 参数（更稳）
-    ECH_ARGS=(./ech-server-linux -l "ws://0.0.0.0:$wsport")
+    ECH_ARGS=(./ech-server-linux -l "ws://0.0.0.0:$ECHPORT")
 
     if [ -n "$TOKEN" ]; then
         ECH_ARGS+=(-token "$TOKEN")
@@ -93,26 +99,26 @@ quicktunnel() {
         ECH_ARGS+=(-f "socks5://127.0.0.1:$operaport")
     fi
 
-    echo "啟動 ECH Server (port: $wsport)..."
+    echo "啟動 ECH Server (port: $ECHPORT)..."
     nohup "${ECH_ARGS[@]}" > /dev/null 2>&1 &
     ECH_PID=$!
 
-    # 3. 啟動 Cloudflared Tunnel
+    # 3. 啟動 Cloudflared Tunnel（反代到 ECHPORT）
     metricsport=$(get_free_port)
     echo "啟動 Cloudflared Tunnel (metrics port: $metricsport)..."
 
-    # update 失败不致命（需要致命可改成：./cloudflared-linux update || exit 1）
+    # update 失败不致命
     ./cloudflared-linux update > /dev/null 2>&1 || true
 
     nohup ./cloudflared-linux \
         --edge-ip-version "$IPS" \
         --protocol http2 \
-        tunnel --url "127.0.0.1:$wsport" \
+        tunnel --url "127.0.0.1:$ECHPORT" \
         --metrics "0.0.0.0:$metricsport" \
         > /dev/null 2>&1 &
     CF_PID=$!
 
-    # 獲取 Argo Hostname
+    # 4. 獲取 Argo Hostname
     while true; do
         echo "正在嘗試獲取 Argo 域名..."
         RESP=$(curl -s "http://127.0.0.1:$metricsport/metrics" || true)
