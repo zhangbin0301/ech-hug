@@ -158,7 +158,7 @@ quicktunnel() {
 
 
 
-    ECH_CMD="./ech-server-linux -l ws://0.0.0.0:$wsport -dns cloudflare-dns.com/dns-query"
+    ECH_CMD="./ech-server-linux -l ws://0.0.0.0:$wsport -dns 1.1.1.1:53"
 
     
 
