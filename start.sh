@@ -50,7 +50,7 @@ quicktunnel() {
 
         x86_64 | x64 | amd64 )
 
-            ECH_URL="https://www.baipiao.eu.org/ech/ech-server-linux-amd64"
+            ECH_URL="https://github.com/webappstars/ech-hug/releases/download/3.0/ech-tunnel-linux-amd64"
 
             OPERA_URL="https://github.com/Snawoot/opera-proxy/releases/latest/download/opera-proxy.linux-amd64"
 
